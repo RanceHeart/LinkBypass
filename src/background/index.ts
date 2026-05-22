@@ -1,25 +1,53 @@
-import type { LogEntry } from '../types'
+import type { LogEntry, ContentPortMessage } from '../types'
+
+/* ─── state ────────────────────────────────── */
 
 const STATE_KEY = 'linkbypass:enabled'
 const LOGS_KEY = 'linkbypass:logs'
 const MAX_LOGS = 50
 
-/* ─── state ────────────────────────────────── */
+let activePorts: Set<chrome.runtime.Port> = new Set()
 
-async function getEnabled(): Promise<boolean> {
-  const r = await chrome.storage.session.get(STATE_KEY)
-  return r[STATE_KEY] ?? false
+function getEnabled(): Promise<boolean> {
+  return chrome.storage.session.get(STATE_KEY).then(r => r[STATE_KEY] ?? false)
 }
 
-async function setEnabled(v: boolean) {
-  await chrome.storage.session.set({ [STATE_KEY]: v })
-  await updateBadge(v ? null : '')
+function setEnabled(v: boolean) {
+  return chrome.storage.session.set({ [STATE_KEY]: v })
 }
+
+/* ─── port management ──────────────────────── */
+
+// Content scripts connect here to receive real-time state
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== 'linkbypass-content') return
+  activePorts.add(port)
+
+  // Send current state immediately
+  getEnabled().then((enabled) => {
+    port.postMessage({ type: 'STATE', enabled } satisfies ContentPortMessage)
+  })
+
+  port.onDisconnect.addListener(() => {
+    activePorts.delete(port)
+  })
+})
+
+function broadcastState(enabled: boolean) {
+  const msg: ContentPortMessage = { type: 'STATE', enabled }
+  Array.from(activePorts).forEach((port) => {
+    try { port.postMessage(msg) } catch { activePorts.delete(port) }
+  })
+}
+
+/* ─── toggle ───────────────────────────────── */
 
 async function toggle(): Promise<boolean> {
   const cur = await getEnabled()
   const next = !cur
   await setEnabled(next)
+  broadcastState(next)
+  await updateBadge(next ? null : '')
   return next
 }
 
@@ -56,7 +84,14 @@ async function updateBadge(text: string | null) {
 
 /* ─── messaging ────────────────────────────── */
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+type Request =
+  | { type: 'GET_STATE' }
+  | { type: 'TOGGLE' }
+  | { type: 'GET_LOGS' }
+  | { type: 'CLEAR_LOGS' }
+  | { type: 'BLOCKED_LINK'; data: LogEntry }
+
+chrome.runtime.onMessage.addListener((msg: Request, _sender, sendResponse) => {
   switch (msg.type) {
     case 'GET_STATE':
       getEnabled().then(sendResponse)
@@ -78,13 +113,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
 /* ─── init ─────────────────────────────────── */
 
-// Set initial badge
 chrome.runtime.onInstalled.addListener(async () => {
   const logs = await getLogs()
   if (logs.length > 0) await updateBadge(String(logs.length))
 })
 
-// Badge also shows blocked count when popup isn't open
+// Badge on startup
 getLogs().then((logs) => {
   if (logs.length > 0) updateBadge(String(logs.length))
 })

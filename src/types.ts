@@ -8,12 +8,12 @@ export interface LogEntry {
   timestamp: number
 }
 
-export interface StateMessage {
-  type: 'GET_STATE' | 'TOGGLE' | 'GET_LOGS' | 'CLEAR_LOGS' | 'BLOCKED_LINK'
-  data?: LogEntry
+/* Messages from content script port → background */
+export interface ContentPortMessage {
+  type: 'STATE'
+  enabled: boolean
 }
 
-export type PopupMessage =
+/* Commands background pushes through the port */
+export type PortCommand =
   | { type: 'STATE'; enabled: boolean }
-  | { type: 'LOGS'; logs: LogEntry[] }
-  | { type: 'LOG_ERROR'; error: string }
