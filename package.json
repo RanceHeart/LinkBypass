@@ -1,0 +1,23 @@
+{
+  "name": "linkbypass",
+  "displayName": "LinkBypass",
+  "version": "0.1.0",
+  "author": "RanceHeart",
+  "description": "Block cross-domain navigation from HTML clicks — stay on the site you intend to.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.18.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@crxjs/vite-plugin": "^2.0.0-beta.26",
+    "@types/chrome": "^0.0.246",
+    "typescript": "^5.2.2",
+    "vite": "^5.4.10"
+  }
+}

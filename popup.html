@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LinkBypass</title>
+  </head>
+  <body>
+    <div id="app">
+      <!-- Header -->
+      <header class="header">
+        <div class="header-left">
+          <span class="logo-icon">↗</span>
+          <span class="logo-text">LinkBypass</span>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="toggleInput" />
+          <span class="toggle-track">
+            <span class="toggle-thumb"></span>
+          </span>
+        </label>
+      </header>
+
+      <!-- Subheader -->
+      <div class="subheader" id="subheader">
+        <span id="countLabel">Blocked 0 links</span>
+        <button class="btn-clear" id="clearBtn">Clear</button>
+      </div>
+
+      <!-- Log list -->
+      <div class="log-list" id="logList">
+        <div class="empty-state" id="emptyState">
+          <span class="empty-icon">🛡️</span>
+          <span class="empty-text">No blocked links yet</span>
+          <span class="empty-hint">Enable the toggle above to start intercepting</span>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/popup/index.ts"></script>
+  </body>
+</html>
