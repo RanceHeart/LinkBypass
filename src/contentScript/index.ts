@@ -177,6 +177,46 @@ const adObserver = new MutationObserver((mutations) => {
 })
 adObserver.observe(document.documentElement, { childList: true, subtree: true })
 
+/* ─── neutralize full-page click overlays ──── */
+// Some sites place a transparent position:fixed div over everything
+// that captures all clicks and navigates to ads.
+function neutralizeOverlay(el: Element) {
+  const style = window.getComputedStyle(el)
+  const z = parseInt(style.zIndex, 10)
+  if (isNaN(z) || z < 99999) return
+  if (style.position !== 'fixed' && style.position !== 'absolute') return
+  const w = parseFloat(style.width)
+  const h = parseFloat(style.height)
+  if (w < window.innerWidth * 0.5 || h < window.innerHeight * 0.5) return
+  // It's a full-screen overlay with high z-index — neutralize it
+  // Set pointer-events:none so clicks pass through to real content
+  ;(el as HTMLElement).style.pointerEvents = 'none'
+  // If it had an onclick, clear it
+  if (el.getAttribute('onclick')) el.removeAttribute('onclick')
+}
+
+// Scan existing overlays (wrap in try because body may not be ready at document_start)
+try {
+  Array.from(document.querySelectorAll('body > *')).forEach((el) => {
+    try { neutralizeOverlay(el) } catch {}
+  })
+} catch {}
+
+// Watch for new overlays
+let overlayObserver: MutationObserver | null = null
+function setupOverlayWatch() {
+  if (!document.body) { setTimeout(setupOverlayWatch, 100); return }
+  overlayObserver = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+      for (const node of Array.from(m.addedNodes)) {
+        if (node instanceof Element) neutralizeOverlay(node)
+      }
+    }
+  })
+  overlayObserver.observe(document.body, { childList: true, subtree: true })
+}
+setupOverlayWatch()
+
 /* ─── attach listeners ─────────────────────── */
 
 document.addEventListener('click', handleNav, true)
