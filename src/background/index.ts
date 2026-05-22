@@ -83,8 +83,9 @@ async function updateBadge(text: string | null) {
   await chrome.action.setTitle({ title: label })
 
   if (!enabled) {
-    // OFF: no badge
-    await chrome.action.setBadgeText({ text: '' })
+    // OFF: show grey badge
+    await chrome.action.setBadgeText({ text: '○' })
+    await chrome.action.setBadgeBackgroundColor({ color: '#aeaeb2' }) // grey
     return
   }
 
