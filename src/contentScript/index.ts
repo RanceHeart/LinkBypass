@@ -2,21 +2,24 @@ import type { LogEntry } from '../types'
 
 let enabled = false
 
-/* ─── connect to background ────────────────── */
+/* ─── connect to background with auto-reconnect ── */
 
-const port = chrome.runtime.connect({ name: 'linkbypass-content' })
+function connectPort() {
+  const p = chrome.runtime.connect({ name: 'linkbypass-content' })
 
-port.onMessage.addListener((msg: { type: string; enabled: boolean }) => {
-  if (msg.type === 'STATE') {
-    enabled = msg.enabled
-  }
-})
+  p.onMessage.addListener((msg: { type: string; enabled: boolean }) => {
+    if (msg.type === 'STATE') {
+      enabled = msg.enabled
+    }
+  })
 
-port.onDisconnect.addListener(() => {
-  // Background SW died — reconnect on next interaction
-  // Content script will still be alive; we just silently go to "disabled" state
-  enabled = false
-})
+  p.onDisconnect.addListener(() => {
+    // SW died or not ready — keep current enabled state, retry connection
+    setTimeout(connectPort, 500)
+  })
+}
+
+connectPort()
 
 /* ─── helpers ──────────────────────────────── */
 
