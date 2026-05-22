@@ -77,7 +77,7 @@ function showToast(targetDomain: string) {
 
 /* ─── interceptor ──────────────────────────── */
 
-function handleNav(event: MouseEvent) {
+function handleNav(event: MouseEvent, isAuxClick = false) {
   if (!enabled) return
 
   const anchor = getAnchor(event.target)
@@ -94,13 +94,24 @@ function handleNav(event: MouseEvent) {
   }
 
   const currentHost = window.location.hostname
-  if (currentHost === targetHost) return
 
-  // Cross-domain — block
+  // When enabled, hijack ALL <a> clicks to prevent page scripts
+  // from intercepting and redirecting to ads
   event.preventDefault()
   event.stopPropagation()
   event.stopImmediatePropagation()
 
+  if (currentHost === targetHost) {
+    // Same-domain — navigate manually to honor the original link
+    if (isAuxClick) {
+      window.open(href, '_blank')
+    } else {
+      window.location.href = href
+    }
+    return
+  }
+
+  // Cross-domain — block
   const logEntry: LogEntry = {
     id: generateId(),
     url: href,
@@ -191,7 +202,7 @@ setupOverlayWatch()
 
 /* ─── attach listeners ─────────────────────── */
 
-document.addEventListener('click', handleNav, true)
-document.addEventListener('auxclick', handleNav, true)
+document.addEventListener('click', (e) => handleNav(e, false), true)
+document.addEventListener('auxclick', (e) => handleNav(e, true), true)
 
 console.info('[LinkBypass] content script loaded')
