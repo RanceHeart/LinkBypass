@@ -1,4 +1,5 @@
 import type { LogEntry } from '../types'
+import confetti from 'canvas-confetti'
 
 let enabled = false
 
@@ -39,44 +40,15 @@ function generateId(): string {
 /* ─── confetti burst ───────────────────────── */
 
 function burstConfetti(x: number, y: number) {
-  const container = document.createElement('div')
-  container.style.cssText = `
-    position: fixed; left:${x}px; top:${y}px;
-    pointer-events:none; z-index:2147483647;
-    width:0; height:0;
-  `
-  const colors = ['#007aff', '#34c759', '#ff9500', '#ff3b30', '#af52de', '#ff2d55', '#5856d6']
-  const count = 12
-
-  for (let i = 0; i < count; i++) {
-    const dot = document.createElement('div')
-    const color = colors[Math.floor(Math.random() * colors.length)]
-    const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.5
-    const dist = 40 + Math.random() * 30
-    const dx = Math.cos(angle) * dist
-    const dy = Math.sin(angle) * dist
-    const size = 4 + Math.random() * 4
-
-    dot.style.cssText = `
-      position:absolute; width:${size}px; height:${size}px;
-      border-radius:50%; background:${color};
-      left:0; top:0;
-      transform:translate(${dx}px, ${dy}px) scale(0);
-      opacity:1;
-      transition: transform 0.5s cubic-bezier(.2,.8,.2,1), opacity 0.5s ease 0.15s;
-    `
-
-    container.appendChild(dot)
-
-    // Trigger animation on next frame
-    requestAnimationFrame(() => {
-      dot.style.transform = `translate(${dx}px, ${dy}px) scale(1)`
-      dot.style.opacity = '0'
-    })
-  }
-
-  document.body.appendChild(container)
-  setTimeout(() => container.remove(), 600)
+  confetti({
+    particleCount: 20,
+    spread: 60,
+    origin: { x: x / window.innerWidth, y: y / window.innerHeight },
+    colors: ['#007aff', '#34c759', '#ff9500', '#ff3b30', '#af52de', '#5856d6'],
+    startVelocity: 30,
+    gravity: 0.6,
+    ticks: 100,
+  })
 }
 
 /* ─── tiny pill toast ──────────────────────── */

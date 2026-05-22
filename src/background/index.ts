@@ -113,6 +113,15 @@ chrome.runtime.onMessage.addListener((msg: Request, _sender, sendResponse) => {
 
 /* ─── init ─────────────────────────────────── */
 
+// Keyboard shortcut toggle
+chrome.commands.onCommand.addListener((command) => {
+  if (command === 'toggle') {
+    toggle().then((newState) => {
+      console.log('[LinkBypass] toggled', newState ? 'ON' : 'OFF')
+    })
+  }
+})
+
 chrome.runtime.onInstalled.addListener(async () => {
   const logs = await getLogs()
   if (logs.length > 0) await updateBadge(String(logs.length))

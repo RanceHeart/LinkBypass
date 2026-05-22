@@ -22,6 +22,15 @@ export default defineManifest({
     service_worker: 'src/background/index.ts',
     type: 'module',
   },
+  commands: {
+    toggle: {
+      suggested_key: {
+        default: 'Ctrl+K',
+        mac: 'Command+K',
+      },
+      description: 'Toggle LinkBypass on/off',
+    },
+  },
   content_scripts: [
     {
       matches: ['http://*/*', 'https://*/*'],
