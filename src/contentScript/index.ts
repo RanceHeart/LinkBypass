@@ -149,7 +149,56 @@ function handleNav(event: MouseEvent) {
 document.addEventListener('click', handleNav, true)
 document.addEventListener('auxclick', handleNav, true)
 
-console.info('[LinkBypass] content script loaded')
+// Layer 2: Navigation API — catches iframe-originated and programmatic navigations
+const nav = (window as any).navigation
+if (nav) {
+  nav.addEventListener('navigate', (event: any) => {
+    if (!enabled) return
 
-// Debug marker — add data attribute to <html>
-document.documentElement.dataset.linkbypass = 'loaded'
+    const destUrl = event.destination.url
+    if (!destUrl) return
+
+    let destHost: string
+    try { destHost = new URL(destUrl).hostname } catch { return }
+    if (!destHost) return
+
+    // Block navigation to about:blank (ad/malware pattern)
+    if (destUrl.startsWith('about:')) {
+      if (event.canIntercept) {
+        event.preventDefault()
+        const logEntry: LogEntry = {
+          id: generateId(), url: destUrl, domain: destHost,
+          sourceUrl: window.location.href, sourceDomain: window.location.hostname,
+          title: document.title, timestamp: Date.now(),
+        }
+        chrome.runtime.sendMessage({ type: 'BLOCKED_LINK', data: logEntry }).catch(() => {})
+        burstConfetti(0, 0); showToast('about:blank')
+      }
+      return
+    }
+
+    const currentHost = window.location.hostname
+    if (currentHost === destHost) return
+
+    // Cross-domain navigation — intercept
+    if (event.canIntercept) {
+      event.preventDefault()
+
+      const logEntry: LogEntry = {
+        id: generateId(),
+        url: destUrl,
+        domain: destHost,
+        sourceUrl: window.location.href,
+        sourceDomain: currentHost,
+        title: document.title,
+        timestamp: Date.now(),
+      }
+
+      chrome.runtime.sendMessage({ type: 'BLOCKED_LINK', data: logEntry }).catch(() => {})
+      burstConfetti(0, 0)
+      showToast(destHost)
+    }
+  })
+}
+
+console.info('[LinkBypass] content script loaded')
