@@ -150,3 +150,6 @@ document.addEventListener('click', handleNav, true)
 document.addEventListener('auxclick', handleNav, true)
 
 console.info('[LinkBypass] content script loaded')
+
+// Debug marker — add data attribute to <html>
+document.documentElement.dataset.linkbypass = 'loaded'
