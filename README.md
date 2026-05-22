@@ -1,6 +1,6 @@
 # LinkBypass
 
-> Block cross-domain navigation from HTML clicks — stay on the site you intend to.
+> Block cross-domain navigation from HTML clicks — stay on the site you intend to. PS: Poxx web toomany AD track, block them may quite improve your experience
 
 [![GitHub release](https://img.shields.io/github/v/release/RanceHeart/LinkBypass)](https://github.com/RanceHeart/LinkBypass/releases)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-v0.1.0-blue)](https://github.com/RanceHeart/LinkBypass/releases)
