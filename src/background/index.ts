@@ -71,15 +71,32 @@ async function clearLogs() {
   await updateBadge(null)
 }
 
-/* ─── badge ────────────────────────────────── */
+/* ─── badge & icon ─────────────────────────── */
 
 async function updateBadge(text: string | null) {
+  const enabled = await getEnabled()
+
+  // Tooltip always shows state + shortcut
+  const label = enabled
+    ? 'LinkBypass: ON  (⌘K to toggle)'
+    : 'LinkBypass: OFF  (⌘K to toggle)'
+  await chrome.action.setTitle({ title: label })
+
+  if (!enabled) {
+    // OFF: no badge
+    await chrome.action.setBadgeText({ text: '' })
+    return
+  }
+
+  // ON: show count, or "✓" if 0
   if (text === null) {
     const logs = await getLogs()
-    text = logs.length > 0 ? String(logs.length) : ''
+    text = logs.length > 0 ? String(logs.length) : '✓'
   }
+  if (text === '0' || text === '') text = '✓'
+
   await chrome.action.setBadgeText({ text })
-  await chrome.action.setBadgeBackgroundColor({ color: '#007aff' })
+  await chrome.action.setBadgeBackgroundColor({ color: '#34c759' }) // iOS green
 }
 
 /* ─── messaging ────────────────────────────── */
