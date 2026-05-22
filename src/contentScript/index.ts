@@ -171,11 +171,8 @@ function neutralizeOverlay(el: Element) {
   const w = parseFloat(style.width)
   const h = parseFloat(style.height)
   if (w < window.innerWidth * 0.5 || h < window.innerHeight * 0.5) return
-  // It's a full-screen overlay with high z-index — neutralize it
-  // Set pointer-events:none so clicks pass through to real content
-  ;(el as HTMLElement).style.pointerEvents = 'none'
-  // If it had an onclick, clear it
-  if (el.getAttribute('onclick')) el.removeAttribute('onclick')
+  // Full-screen overlay with high z-index — delete it
+  el.parentNode?.removeChild(el)
 }
 
 // Scan existing overlays (wrap in try because body may not be ready at document_start)
