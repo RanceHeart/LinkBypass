@@ -16,13 +16,14 @@ Load: Chrome → `chrome://extensions` → Dev mode → Load unpacked → `build
 - Vite + CRXJS (`@crxjs/vite-plugin`)
 - TypeScript, Manifest V3
 - `canvas-confetti` for fireworks
+- Shortcut `Ctrl+.` / `Cmd+.` (Chrome doesn't support `/`)
 - No framework (vanilla TS)
 
 ## Key Files
 
 | File | Role |
 |------|------|
-| `src/manifest.ts` | Permissions (`storage`, `contextMenus`), shortcut `Ctrl+/ / Cmd+/` |
+| `src/manifest.ts` | Permissions (`storage`, `contextMenus`), shortcut `Ctrl+. / Cmd+.` |
 | `src/background/index.ts` | SW: state mgmt (`chrome.storage.session`), context menus, port broadcast |
 | `src/contentScript/index.ts` | 3 rule blocks, confetti+URL floating, port connect |
 | `src/popup/index.ts` | Single toggle (ON/OFF) |
@@ -63,5 +64,5 @@ Chrome Web Store: dev console → upload ZIP → fill listing → submit review 
 
 - `file://` URLs don't match `http://*/*` / `https://*/*` in content script patterns — extension only works on http/https pages
 - Context menus (`chrome.contextMenus.create`) only work at `contexts: ['action']` for extension icon
-- `Ctrl+Slash` as shortcut key — Chrome may reject if unsupported; fallback: user sets manually at `chrome://extensions/shortcuts`
+- `Ctrl+.` as shortcut key — `Period` is the official Chrome key name. If user wants something else, set at `chrome://extensions/shortcuts`
 - Context menu checkboxes auto-managed by Chrome on click; background SW reads `info.checked`

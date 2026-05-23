@@ -25,8 +25,8 @@ export default defineManifest({
   commands: {
     toggle: {
       suggested_key: {
-        default: 'Ctrl+Slash',
-        mac: 'Command+Slash',
+        default: 'Ctrl+Period',
+        mac: 'Command+Period',
       },
       description: 'Toggle LinkBypass on/off',
     },
