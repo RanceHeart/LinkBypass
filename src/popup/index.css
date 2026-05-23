@@ -17,11 +17,8 @@
   --separator: #e5e5ea;
   --accent: #007aff;
   --green: #34c759;
-  --red: #ff3b30;
   --toggle-bg-off: #e9e9eb;
   --toggle-bg-on: var(--green);
-  --shadow-small: 0 1px 3px rgba(0, 0, 0, 0.08);
-  --radius: 10px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -33,7 +30,6 @@
     --text-tertiary: #636366;
     --separator: #38383a;
     --toggle-bg-off: #39393d;
-    --shadow-small: 0 1px 3px rgba(0, 0, 0, 0.3);
   }
 }
 
@@ -43,20 +39,13 @@ html {
 }
 
 body {
-  width: 360px;
+  width: 260px;
   margin: 0;
   padding: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
   background: var(--bg);
   color: var(--text);
-  overflow-x: hidden;
   user-select: none;
-}
-
-#app {
-  display: flex;
-  flex-direction: column;
-  max-height: 500px;
 }
 
 /* ─── Header ─────────────────────────────── */
@@ -65,8 +54,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px 12px;
-  border-bottom: 1px solid var(--separator);
+  padding: 14px 16px 10px;
 }
 
 .header-left {
@@ -98,7 +86,15 @@ body {
   line-height: 1.4;
 }
 
-/* ─── Toggle switch ──────────────────────── */
+/* ─── Status ─────────────────────────────── */
+
+.status {
+  padding: 0 16px 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ─── Toggle switch (iOS style) ──────────── */
 
 .toggle {
   position: relative;
@@ -142,150 +138,4 @@ body {
 
 .toggle input:checked + .toggle-track .toggle-thumb {
   transform: translateX(16px);
-}
-
-/* ─── Subheader ──────────────────────────── */
-
-.subheader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 16px;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.btn-clear {
-  background: none;
-  border: none;
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-.btn-clear:hover {
-  background: var(--bg-secondary);
-}
-
-.btn-clear:active {
-  opacity: 0.7;
-}
-
-/* ─── Log list ───────────────────────────── */
-
-.log-list {
-  flex: 1;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.log-list::-webkit-scrollbar {
-  width: 4px;
-}
-
-.log-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.log-list::-webkit-scrollbar-thumb {
-  background: var(--text-tertiary);
-  border-radius: 2px;
-}
-
-/* ─── Empty state ────────────────────────── */
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 48px 24px;
-  text-align: center;
-}
-
-.empty-icon {
-  font-size: 28px;
-  margin-bottom: 8px;
-}
-
-.empty-text {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.empty-hint {
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
-/* ─── Log entry ──────────────────────────── */
-
-.log-entry {
-  display: flex;
-  flex-direction: column;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--separator);
-  cursor: pointer;
-  transition: background 0.1s;
-}
-
-.log-entry:hover {
-  background: var(--bg-secondary);
-}
-
-.log-entry:active {
-  background: var(--bg-secondary);
-  opacity: 0.8;
-}
-
-.log-entry-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 3px;
-}
-
-.log-source-domain {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  background: var(--bg-secondary);
-  padding: 1px 6px;
-  border-radius: 4px;
-  letter-spacing: -0.01em;
-}
-
-.log-timestamp {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  margin-left: auto;
-  flex-shrink: 0;
-}
-
-.log-url {
-  font-size: 13px;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding-left: 4px;
-}
-
-.log-url-domain {
-  font-weight: 500;
-}
-
-.log-url-path {
-  color: var(--text-secondary);
-}
-
-/* ─── Link arrow ─────────────────────────── */
-
-.log-entry .arrow {
-  font-size: 10px;
-  color: var(--text-tertiary);
-  margin-right: 3px;
 }

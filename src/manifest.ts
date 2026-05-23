@@ -5,7 +5,7 @@ const isDev = process.env.NODE_ENV == 'development'
 
 export default defineManifest({
   name: `${packageData.displayName || packageData.name}${isDev ? ` ➡️ Dev` : ''}`,
-  description: 'Block cross-domain navigation — stay on the site you intend to.',
+  description: 'Cross-domain link? Pop confetti, chase the URL.',
   version: packageData.version,
   manifest_version: 3,
   icons: {
@@ -25,8 +25,8 @@ export default defineManifest({
   commands: {
     toggle: {
       suggested_key: {
-        default: 'Ctrl+K',
-        mac: 'Command+K',
+        default: 'Ctrl+Slash',
+        mac: 'Command+Slash',
       },
       description: 'Toggle LinkBypass on/off',
     },
@@ -38,6 +38,6 @@ export default defineManifest({
       run_at: 'document_start',
     },
   ],
-  permissions: ['storage'],
+  permissions: ['storage', 'contextMenus'],
   host_permissions: ['http://*/*', 'https://*/*'],
 })

@@ -1,25 +1,25 @@
-import type { LogEntry } from '../types'
+import type { AppState, StateMessage } from '../types'
 import confetti from 'canvas-confetti'
 
-let enabled = false
+/* ─── state ────────────────────────────────── */
 
-/* ─── connect to background with auto-reconnect ── */
+let state: AppState = { enabled: true, rules: { intercept: true, sandbox: true, overlay: true } }
+
+/* ─── port connection with auto-reconnect ──── */
 
 function connectPort() {
   const p = chrome.runtime.connect({ name: 'linkbypass-content' })
 
-  p.onMessage.addListener((msg: { type: string; enabled: boolean }) => {
+  p.onMessage.addListener((msg: StateMessage) => {
     if (msg.type === 'STATE') {
-      enabled = msg.enabled
+      state = msg.state
     }
   })
 
   p.onDisconnect.addListener(() => {
-    // SW died or not ready — keep current enabled state, retry connection
     setTimeout(connectPort, 500)
   })
 }
-
 connectPort()
 
 /* ─── helpers ──────────────────────────────── */
@@ -33,52 +33,76 @@ function getAnchor(el: EventTarget | null): HTMLAnchorElement | HTMLAreaElement 
   return el.closest('a') ?? el.closest('area')
 }
 
-function generateId(): string {
-  return crypto.randomUUID?.() ?? Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
-}
+/* ═══════════════════════════════════════════════
+   RULE 1: 跨域拦截 + 烟花
+   ═══════════════════════════════════════════════ */
 
-/* ─── confetti burst ───────────────────────── */
+function showConfettiWithUrl(href: string, x: number, y: number) {
+  const label = new URL(href).hostname
 
-function burstConfetti(x: number, y: number) {
+  // 🎆 烟花
   confetti({
-    particleCount: 20,
-    spread: 60,
+    particleCount: 30,
+    spread: 80,
     origin: { x: x / window.innerWidth, y: y / window.innerHeight },
     colors: ['#007aff', '#34c759', '#ff9500', '#ff3b30', '#af52de', '#5856d6'],
     startVelocity: 30,
     gravity: 0.6,
     ticks: 100,
   })
-}
 
-/* ─── tiny pill toast ──────────────────────── */
-
-function showToast(targetDomain: string) {
-  const toast = document.createElement('div')
-  toast.textContent = `↗ blocked · ${targetDomain}`
-  toast.style.cssText = `
-    position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
-    background:rgba(0,0,0,0.8); color:#fff;
-    font:12px/1.4 -apple-system,BlinkMacSystemFont,sans-serif;
-    padding:8px 14px; border-radius:20px;
-    z-index:2147483647; pointer-events:none;
-    opacity:0; transition: opacity 0.25s ease;
-    backdrop-filter: blur(8px);
-    max-width:80vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  // URL 标签 — 和烟花从同一点炸出
+  const el = document.createElement('div')
+  el.textContent = `→ ${label}`
+  el.title = href
+  el.style.cssText = `
+    position: fixed;
+    left: ${x}px;
+    top: ${y}px;
+    font: 600 14px/1.3 -apple-system, BlinkMacSystemFont, sans-serif;
+    color: #fff;
+    background: rgba(0,0,0,.72);
+    padding: 5px 16px;
+    border-radius: 20px;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 2147483647;
+    cursor: pointer;
+    pointer-events: auto;
+    user-select: none;
+    white-space: nowrap;
+    transform: translate(-50%, -50%);
+    transition: opacity .7s ease, transform .7s cubic-bezier(.22,1,.36,1);
+    box-shadow: 0 2px 12px rgba(0,0,0,.25);
+    opacity: 1;
   `
-  document.body.appendChild(toast)
+  el.addEventListener('click', (e) => {
+    e.stopPropagation()
+    e.preventDefault()
+    window.open(href, '_blank')
+    el.remove()
+  })
 
-  requestAnimationFrame(() => { toast.style.opacity = '1' })
+  document.body.appendChild(el)
+
+  // 跟烟花同步消散 — 随机方向飘走
+  const angle = (Math.random() - 0.5) * 1.5  // -0.75 ~ 0.75 rad
+  const distance = 80 + Math.random() * 70   // 80–150px
+  const dx = Math.sin(angle) * distance
+  const dy = -Math.cos(angle) * distance - 40 // 偏上
+
+  requestAnimationFrame(() => {
+    el.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`
+    el.style.opacity = '0'
+  })
+
   setTimeout(() => {
-    toast.style.opacity = '0'
-    setTimeout(() => toast.remove(), 300)
-  }, 1800)
+    if (el.parentNode) el.remove()
+  }, 2000)
 }
-
-/* ─── interceptor ──────────────────────────── */
 
 function handleNav(event: MouseEvent, isAuxClick = false) {
-  if (!enabled) return
+  if (!state.enabled || !state.rules.intercept) return
 
   const anchor = getAnchor(event.target)
   if (!anchor) return
@@ -95,14 +119,13 @@ function handleNav(event: MouseEvent, isAuxClick = false) {
 
   const currentHost = window.location.hostname
 
-  // When enabled, hijack ALL <a> clicks to prevent page scripts
-  // from intercepting and redirecting to ads
+  // Prevent any hijacking
   event.preventDefault()
   event.stopPropagation()
   event.stopImmediatePropagation()
 
   if (currentHost === targetHost) {
-    // Same-domain — navigate manually to honor the original link
+    // 同域 — 正常导航
     if (isAuxClick) {
       window.open(href, '_blank')
     } else {
@@ -111,28 +134,19 @@ function handleNav(event: MouseEvent, isAuxClick = false) {
     return
   }
 
-  // Cross-domain — block
-  const logEntry: LogEntry = {
-    id: generateId(),
-    url: href,
-    domain: targetHost,
-    sourceUrl: window.location.href,
-    sourceDomain: currentHost,
-    title: document.title,
-    timestamp: Date.now(),
-  }
-
-  // Log to background
-  chrome.runtime.sendMessage({ type: 'BLOCKED_LINK', data: logEntry }).catch(() => {})
-
-  // Visual feedback
-  burstConfetti(event.clientX, event.clientY)
-  showToast(targetHost)
+  // 跨域 — 放烟花
+  showConfettiWithUrl(href, event.clientX, event.clientY)
 }
 
-/* ─── strip dangerous iframe sandbox ────────── */
-// Remove allow-top-navigation from iframes — ads use this to hijack the page
+document.addEventListener('click', (e) => handleNav(e, false), true)
+document.addEventListener('auxclick', (e) => handleNav(e, true), true)
+
+/* ═══════════════════════════════════════════════
+   RULE 2: iframe 沙箱净化
+   ═══════════════════════════════════════════════ */
+
 function stripAdSandbox(iframe: HTMLIFrameElement) {
+  if (!state.enabled || !state.rules.sandbox) return
   const s = iframe.getAttribute('sandbox')
   if (!s) return
   const stripped = s
@@ -143,11 +157,9 @@ function stripAdSandbox(iframe: HTMLIFrameElement) {
   if (stripped !== s) iframe.setAttribute('sandbox', stripped)
 }
 
-// Scan existing iframes
 Array.from(document.querySelectorAll('iframe')).forEach(stripAdSandbox)
 
-// Watch for dynamically added iframes
-const adObserver = new MutationObserver((mutations) => {
+const iframeObserver = new MutationObserver((mutations) => {
   for (const m of mutations) {
     const nodes = Array.from(m.addedNodes)
     for (const node of nodes) {
@@ -158,12 +170,14 @@ const adObserver = new MutationObserver((mutations) => {
     }
   }
 })
-adObserver.observe(document.documentElement, { childList: true, subtree: true })
+iframeObserver.observe(document.documentElement, { childList: true, subtree: true })
 
-/* ─── neutralize full-page click overlays ──── */
-// Some sites place a transparent position:fixed div over everything
-// that captures all clicks and navigates to ads.
+/* ═══════════════════════════════════════════════
+   RULE 3: 全屏覆盖清除
+   ═══════════════════════════════════════════════ */
+
 function neutralizeOverlay(el: Element) {
+  if (!state.enabled || !state.rules.overlay) return
   const style = window.getComputedStyle(el)
   const z = parseInt(style.zIndex, 10)
   if (isNaN(z) || z < 99999) return
@@ -171,22 +185,18 @@ function neutralizeOverlay(el: Element) {
   const w = parseFloat(style.width)
   const h = parseFloat(style.height)
   if (w < window.innerWidth * 0.5 || h < window.innerHeight * 0.5) return
-  // Full-screen overlay with high z-index — delete it
   el.parentNode?.removeChild(el)
 }
 
-// Scan existing overlays (wrap in try because body may not be ready at document_start)
 try {
   Array.from(document.querySelectorAll('body > *')).forEach((el) => {
     try { neutralizeOverlay(el) } catch {}
   })
 } catch {}
 
-// Watch for new overlays
-let overlayObserver: MutationObserver | null = null
 function setupOverlayWatch() {
   if (!document.body) { setTimeout(setupOverlayWatch, 100); return }
-  overlayObserver = new MutationObserver((mutations) => {
+  const overlayObserver = new MutationObserver((mutations) => {
     for (const m of mutations) {
       for (const node of Array.from(m.addedNodes)) {
         if (node instanceof Element) neutralizeOverlay(node)
@@ -197,9 +207,6 @@ function setupOverlayWatch() {
 }
 setupOverlayWatch()
 
-/* ─── attach listeners ─────────────────────── */
-
-document.addEventListener('click', (e) => handleNav(e, false), true)
-document.addEventListener('auxclick', (e) => handleNav(e, true), true)
+/* ─── boot log ─────────────────────────────── */
 
 console.info('[LinkBypass] content script loaded')

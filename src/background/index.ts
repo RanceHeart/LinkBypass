@@ -1,31 +1,56 @@
-import type { LogEntry, ContentPortMessage } from '../types'
+import type { AppState, RulesConfig, Request, StateMessage } from '../types'
+import { DEFAULT_RULES } from '../types'
 
-/* ─── state ────────────────────────────────── */
+/* ─── constants ────────────────────────────── */
 
-const STATE_KEY = 'linkbypass:enabled'
-const LOGS_KEY = 'linkbypass:logs'
-const MAX_LOGS = 50
+const STATE_KEY = 'linkbypass:state'
 
-let activePorts: Set<chrome.runtime.Port> = new Set()
-
-function getEnabled(): Promise<boolean> {
-  return chrome.storage.session.get(STATE_KEY).then(r => r[STATE_KEY] ?? false)
+const RULE_IDS: Record<keyof RulesConfig, string> = {
+  intercept: 'rule-intercept',
+  sandbox: 'rule-sandbox',
+  overlay: 'rule-overlay',
 }
 
-function setEnabled(v: boolean) {
-  return chrome.storage.session.set({ [STATE_KEY]: v })
+const RULE_LABELS: Record<keyof RulesConfig, string> = {
+  intercept: '🎯 跨域拦截 + 烟花',
+  sandbox: '🧹 iframe 沙箱净化',
+  overlay: '🛡️ 全屏覆盖清除',
+}
+
+/* ─── storage ──────────────────────────────── */
+
+function getState(): Promise<AppState> {
+  return chrome.storage.session.get(STATE_KEY).then((r) => {
+    const s = r[STATE_KEY] as AppState | undefined
+    return s ?? { enabled: true, rules: { ...DEFAULT_RULES } }
+  })
+}
+
+function setState(s: AppState): Promise<void> {
+  return chrome.storage.session.set({ [STATE_KEY]: s })
 }
 
 /* ─── port management ──────────────────────── */
 
-// Content scripts connect here to receive real-time state
+let activePorts: Set<chrome.runtime.Port> = new Set()
+
+function broadcastState(state: AppState) {
+  const msg: StateMessage = { type: 'STATE', state }
+  Array.from(activePorts).forEach((port) => {
+    try {
+      port.postMessage(msg)
+    } catch {
+      activePorts.delete(port)
+    }
+  })
+}
+
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== 'linkbypass-content') return
   activePorts.add(port)
 
-  // Send current state immediately
-  getEnabled().then((enabled) => {
-    port.postMessage({ type: 'STATE', enabled } satisfies ContentPortMessage)
+  getState().then((state) => {
+    port.postMessage({ type: 'STATE', state } satisfies StateMessage)
   })
 
   port.onDisconnect.addListener(() => {
@@ -33,119 +58,81 @@ chrome.runtime.onConnect.addListener((port) => {
   })
 })
 
-function broadcastState(enabled: boolean) {
-  const msg: ContentPortMessage = { type: 'STATE', enabled }
-  Array.from(activePorts).forEach((port) => {
-    try { port.postMessage(msg) } catch { activePorts.delete(port) }
+/* ─── context menus ────────────────────────── */
+
+function createMenus() {
+  const entries = Object.entries(RULE_IDS) as [keyof RulesConfig, string][]
+  for (const [rule, id] of entries) {
+    chrome.contextMenus.create({
+      id,
+      title: RULE_LABELS[rule],
+      type: 'checkbox',
+      checked: true,
+      contexts: ['action'],
+    })
+  }
+}
+
+// onCreate is called when the menu already exists (extension reload),
+// so we removeAll first to avoid duplicate-creation errors.
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.removeAll(() => {
+    createMenus()
   })
-}
+})
 
-/* ─── toggle ───────────────────────────────── */
+// Also create on startup (in case SW wakes after browser restart without onInstalled)
+chrome.contextMenus.removeAll(() => {
+  createMenus()
+})
 
-async function toggle(): Promise<boolean> {
-  const cur = await getEnabled()
-  const next = !cur
-  await setEnabled(next)
-  broadcastState(next)
-  await updateBadge(next ? null : '')
-  return next
-}
+chrome.contextMenus.onClicked.addListener((info) => {
+  const rule = (Object.entries(RULE_IDS) as [keyof RulesConfig, string][]).find(
+    ([, id]) => id === info.menuItemId,
+  )?.[0]
+  if (!rule || info.checked === undefined) return
 
-/* ─── logs ─────────────────────────────────── */
-
-async function getLogs(): Promise<LogEntry[]> {
-  const r = await chrome.storage.local.get(LOGS_KEY)
-  return r[LOGS_KEY] ?? []
-}
-
-async function addLog(entry: LogEntry) {
-  const logs = await getLogs()
-  logs.push(entry)
-  if (logs.length > MAX_LOGS) logs.splice(0, logs.length - MAX_LOGS)
-  await chrome.storage.local.set({ [LOGS_KEY]: logs })
-  await updateBadge(String(logs.length))
-}
-
-async function clearLogs() {
-  await chrome.storage.local.set({ [LOGS_KEY]: [] })
-  await updateBadge(null)
-}
-
-/* ─── badge & icon ─────────────────────────── */
-
-async function updateBadge(text: string | null) {
-  const enabled = await getEnabled()
-
-  // Tooltip always shows state + shortcut
-  const label = enabled
-    ? 'LinkBypass: ON  (⌘K to toggle)'
-    : 'LinkBypass: OFF  (⌘K to toggle)'
-  await chrome.action.setTitle({ title: label })
-
-  if (!enabled) {
-    // OFF: show grey badge
-    await chrome.action.setBadgeText({ text: '○' })
-    await chrome.action.setBadgeBackgroundColor({ color: '#aeaeb2' }) // grey
-    return
-  }
-
-  // ON: show count, or "✓" if 0
-  if (text === null) {
-    const logs = await getLogs()
-    text = logs.length > 0 ? String(logs.length) : '✓'
-  }
-  if (text === '0' || text === '') text = '✓'
-
-  await chrome.action.setBadgeText({ text })
-  await chrome.action.setBadgeBackgroundColor({ color: '#34c759' }) // iOS green
-}
+  getState().then((state) => {
+    state.rules[rule] = info.checked
+    setState(state).then(() => broadcastState(state))
+  })
+})
 
 /* ─── messaging ────────────────────────────── */
-
-type Request =
-  | { type: 'GET_STATE' }
-  | { type: 'TOGGLE' }
-  | { type: 'GET_LOGS' }
-  | { type: 'CLEAR_LOGS' }
-  | { type: 'BLOCKED_LINK'; data: LogEntry }
 
 chrome.runtime.onMessage.addListener((msg: Request, _sender, sendResponse) => {
   switch (msg.type) {
     case 'GET_STATE':
-      getEnabled().then(sendResponse)
+      getState().then(sendResponse)
       return true
     case 'TOGGLE':
-      toggle().then(sendResponse)
+      getState().then((state) => {
+        state.enabled = !state.enabled
+        setState(state).then(() => {
+          broadcastState(state)
+          sendResponse(state.enabled)
+        })
+      })
       return true
-    case 'GET_LOGS':
-      getLogs().then(sendResponse)
-      return true
-    case 'CLEAR_LOGS':
-      clearLogs().then(() => sendResponse(true))
-      return true
-    case 'BLOCKED_LINK':
-      addLog(msg.data).then(() => sendResponse(true))
+    case 'TOGGLE_RULE':
+      getState().then((state) => {
+        state.rules[msg.rule] = msg.value
+        setState(state).then(() => {
+          broadcastState(state)
+          sendResponse(true)
+        })
+      })
       return true
   }
 })
 
-/* ─── init ─────────────────────────────────── */
+/* ─── keyboard shortcut ────────────────────── */
 
-// Keyboard shortcut toggle
 chrome.commands.onCommand.addListener((command) => {
   if (command === 'toggle') {
-    toggle().then((newState) => {
-      console.log('[LinkBypass] toggled', newState ? 'ON' : 'OFF')
+    getState().then((state) => {
+      state.enabled = !state.enabled
+      setState(state).then(() => broadcastState(state))
     })
   }
-})
-
-chrome.runtime.onInstalled.addListener(async () => {
-  const logs = await getLogs()
-  if (logs.length > 0) await updateBadge(String(logs.length))
-})
-
-// Badge on startup
-getLogs().then((logs) => {
-  if (logs.length > 0) updateBadge(String(logs.length))
 })
