@@ -24,7 +24,7 @@ Load: Chrome → `chrome://extensions` → Dev mode → Load unpacked → `build
 | File | Role |
 |------|------|
 | `src/manifest.ts` | Permissions (`storage`, `contextMenus`), shortcut `Ctrl+. / Cmd+.` |
-| `src/background/index.ts` | SW: state mgmt (`chrome.storage.session`), context menus, port broadcast |
+| `src/background/index.ts` | SW: state mgmt (`chrome.storage.session`), context menus, badge (✓ ON / ○ OFF), port broadcast |
 | `src/contentScript/index.ts` | 3 rule blocks, confetti+URL floating, port connect |
 | `src/popup/index.ts` | Single toggle (ON/OFF) |
 | `src/types.ts` | `AppState`, `RulesConfig` |

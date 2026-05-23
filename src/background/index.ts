@@ -17,6 +17,23 @@ const RULE_LABELS: Record<keyof RulesConfig, string> = {
   overlay: '🛡️ 全屏覆盖清除',
 }
 
+/* ─── badge ────────────────────────────────── */
+
+async function updateBadge(state: AppState) {
+  if (state.enabled) {
+    await chrome.action.setBadgeText({ text: '✓' })
+    await chrome.action.setBadgeBackgroundColor({ color: '#34c759' })
+  } else {
+    await chrome.action.setBadgeText({ text: '○' })
+    await chrome.action.setBadgeBackgroundColor({ color: '#aeaeb2' })
+  }
+  await chrome.action.setTitle({
+    title: state.enabled
+      ? 'LinkBypass: ON  (⌘. to toggle)'
+      : 'LinkBypass: OFF  (⌘. to toggle)',
+  })
+}
+
 /* ─── storage ──────────────────────────────── */
 
 function getState(): Promise<AppState> {
@@ -86,6 +103,9 @@ chrome.contextMenus.removeAll(() => {
   createMenus()
 })
 
+// Set badget on startup
+getState().then(updateBadge)
+
 chrome.contextMenus.onClicked.addListener((info) => {
   const rule = (Object.entries(RULE_IDS) as [keyof RulesConfig, string][]).find(
     ([, id]) => id === info.menuItemId,
@@ -94,7 +114,10 @@ chrome.contextMenus.onClicked.addListener((info) => {
 
   getState().then((state) => {
     state.rules[rule] = info.checked
-    setState(state).then(() => broadcastState(state))
+    setState(state).then(() => {
+      broadcastState(state)
+      updateBadge(state)
+    })
   })
 })
 
@@ -110,6 +133,7 @@ chrome.runtime.onMessage.addListener((msg: Request, _sender, sendResponse) => {
         state.enabled = !state.enabled
         setState(state).then(() => {
           broadcastState(state)
+          updateBadge(state)
           sendResponse(state.enabled)
         })
       })
@@ -132,7 +156,10 @@ chrome.commands.onCommand.addListener((command) => {
   if (command === 'toggle') {
     getState().then((state) => {
       state.enabled = !state.enabled
-      setState(state).then(() => broadcastState(state))
+      setState(state).then(() => {
+        broadcastState(state)
+        updateBadge(state)
+      })
     })
   }
 })
