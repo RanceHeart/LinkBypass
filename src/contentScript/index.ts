@@ -48,7 +48,7 @@ function showConfettiWithUrl(href: string, x: number, y: number) {
     colors: ['#007aff', '#34c759', '#ff9500', '#ff3b30', '#af52de', '#5856d6'],
     startVelocity: 30,
     gravity: 0.6,
-    ticks: 100,
+    ticks: 200,
   })
 
   // URL 标签 — 和烟花从同一点炸出
@@ -72,7 +72,7 @@ function showConfettiWithUrl(href: string, x: number, y: number) {
     user-select: none;
     white-space: nowrap;
     transform: translate(-50%, -50%);
-    transition: opacity .7s ease, transform .7s cubic-bezier(.22,1,.36,1);
+    transition: opacity 1.5s ease, transform 1.5s cubic-bezier(.22,1,.36,1);
     box-shadow: 0 2px 12px rgba(0,0,0,.25);
     opacity: 1;
   `
@@ -85,11 +85,11 @@ function showConfettiWithUrl(href: string, x: number, y: number) {
 
   document.body.appendChild(el)
 
-  // 跟烟花同步消散 — 随机方向飘走
-  const angle = (Math.random() - 0.5) * 1.5  // -0.75 ~ 0.75 rad
-  const distance = 80 + Math.random() * 70   // 80–150px
+  // 慢慢飘走 — 短距离，长时长
+  const angle = (Math.random() - 0.5) * 1.2  // -0.6 ~ 0.6 rad
+  const distance = 40 + Math.random() * 50   // 40–90px
   const dx = Math.sin(angle) * distance
-  const dy = -Math.cos(angle) * distance - 40 // 偏上
+  const dy = -Math.cos(angle) * distance - 20 // 微微偏上
 
   requestAnimationFrame(() => {
     el.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`
@@ -98,7 +98,7 @@ function showConfettiWithUrl(href: string, x: number, y: number) {
 
   setTimeout(() => {
     if (el.parentNode) el.remove()
-  }, 2000)
+  }, 3500)
 }
 
 function handleNav(event: MouseEvent, isAuxClick = false) {
