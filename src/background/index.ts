@@ -1,110 +1,189 @@
-import type { AppState, RulesConfig, Request, StateMessage } from '../types'
+import type { AppState, BlockEntry, Request, RulesConfig, RuntimeState, StateMessage } from '../types'
 import { DEFAULT_RULES } from '../types'
 
-/* ─── constants ────────────────────────────── */
-
 const STATE_KEY = 'linkbypass:state'
+const LOG_KEY = 'linkbypass:log'
+const MAX_LOG_ENTRIES = 80
+const INTENT_TTL = 1800
+const ALLOW_TTL = 6000
+const RESTORE_TTL = 1500
 
 const RULE_IDS: Record<keyof RulesConfig, string> = {
-  intercept: 'rule-intercept',
-  sandbox: 'rule-sandbox',
-  overlay: 'rule-overlay',
+  linkClicks: 'rule-link-clicks',
+  scriptPopups: 'rule-script-popups',
+  topNavigation: 'rule-top-navigation',
+  overlays: 'rule-overlays',
+  frames: 'rule-frames',
 }
 
 const RULE_LABELS: Record<keyof RulesConfig, string> = {
-  intercept: '🎯 跨域拦截 + 烟花',
-  sandbox: '🧹 iframe 沙箱净化',
-  overlay: '🛡️ 全屏覆盖清除',
+  linkClicks: 'Block cross-site clicks/forms',
+  scriptPopups: 'Block script popups',
+  topNavigation: 'Restore hijacked tab navigation',
+  overlays: 'Disable full-page click overlays',
+  frames: 'Harden ad iframes',
 }
 
-/* ─── badge ────────────────────────────────── */
-
-async function updateBadge(state: AppState) {
-  if (state.enabled) {
-    await chrome.action.setBadgeText({ text: '✓' })
-    await chrome.action.setBadgeBackgroundColor({ color: '#34c759' })
-  } else {
-    await chrome.action.setBadgeText({ text: '○' })
-    await chrome.action.setBadgeBackgroundColor({ color: '#aeaeb2' })
+interface TabState {
+  safeUrl?: string
+  restoringUntil?: number
+  lastIntent?: {
+    targetUrl: string
+    sourceUrl: string
+    at: number
   }
-  await chrome.action.setTitle({
-    title: state.enabled
-      ? 'LinkBypass: ON  (⌘. to toggle)'
-      : 'LinkBypass: OFF  (⌘. to toggle)',
-  })
+  allowOnce?: {
+    targetUrl: string
+    at: number
+  }
 }
 
-/* ─── storage ──────────────────────────────── */
+const tabState = new Map<number, TabState>()
+const ports = new Set<chrome.runtime.Port>()
 
-function getState(): Promise<AppState> {
-  return chrome.storage.session.get(STATE_KEY).then((r) => {
-    const s = r[STATE_KEY] as AppState | undefined
-    return s ?? { enabled: true, rules: { ...DEFAULT_RULES } }
-  })
+function now() {
+  return Date.now()
 }
 
-function setState(s: AppState): Promise<void> {
-  return chrome.storage.session.set({ [STATE_KEY]: s })
+function normalizeState(value: AppState | undefined): AppState {
+  return {
+    enabled: value?.enabled !== false,
+    rules: { ...DEFAULT_RULES, ...value?.rules },
+  }
 }
 
-/* ─── port management ──────────────────────── */
+async function getState(): Promise<AppState> {
+  const result = await chrome.storage.session.get(STATE_KEY)
+  return normalizeState(result[STATE_KEY] as AppState | undefined)
+}
 
-let activePorts: Set<chrome.runtime.Port> = new Set()
+async function setState(state: AppState): Promise<void> {
+  await chrome.storage.session.set({ [STATE_KEY]: normalizeState(state) })
+}
+
+async function getLog(): Promise<BlockEntry[]> {
+  const result = await chrome.storage.session.get(LOG_KEY)
+  return Array.isArray(result[LOG_KEY]) ? result[LOG_KEY] as BlockEntry[] : []
+}
+
+async function setLog(log: BlockEntry[]): Promise<void> {
+  await chrome.storage.session.set({ [LOG_KEY]: log.slice(0, MAX_LOG_ENTRIES) })
+}
+
+async function getRuntimeState(): Promise<RuntimeState> {
+  return { app: await getState(), log: await getLog() }
+}
 
 function broadcastState(state: AppState) {
-  const msg: StateMessage = { type: 'STATE', state }
-  Array.from(activePorts).forEach((port) => {
+  const message: StateMessage = { type: 'STATE', state }
+  for (const port of Array.from(ports)) {
     try {
-      port.postMessage(msg)
+      port.postMessage(message)
     } catch {
-      activePorts.delete(port)
+      ports.delete(port)
+    }
+  }
+}
+
+async function recordBlock(entry: Omit<BlockEntry, 'id' | 'at'>) {
+  const log = await getLog()
+  const next: BlockEntry = {
+    ...entry,
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    at: Date.now(),
+  }
+  await setLog([next, ...log])
+}
+
+function createMenus(state: AppState) {
+  chrome.contextMenus.removeAll(() => {
+    for (const [rule, id] of Object.entries(RULE_IDS) as [keyof RulesConfig, string][]) {
+      chrome.contextMenus.create({
+        id,
+        title: RULE_LABELS[rule],
+        type: 'checkbox',
+        checked: state.rules[rule],
+        contexts: ['action'],
+      })
     }
   })
 }
 
+async function updateBadge(state: AppState) {
+  await chrome.action.setBadgeText({ text: state.enabled ? 'ON' : 'OFF' })
+  await chrome.action.setBadgeBackgroundColor({ color: state.enabled ? '#0a84ff' : '#8e8e93' })
+  await chrome.action.setTitle({
+    title: state.enabled ? 'LinkBypass: protecting tabs' : 'LinkBypass: paused',
+  })
+}
+
+function getHostname(value: string | undefined): string | null {
+  if (!value) return null
+  try {
+    return new URL(value).hostname.toLowerCase()
+  } catch {
+    return null
+  }
+}
+
+function isCrossSite(targetUrl: string | undefined, sourceUrl: string | undefined): boolean {
+  const target = getHostname(targetUrl)
+  const source = getHostname(sourceUrl)
+  return Boolean(target && source && target !== source)
+}
+
+function isAllowed(tab: TabState | undefined, targetUrl: string): boolean {
+  if (!tab?.allowOnce) return false
+  return tab.allowOnce.targetUrl === targetUrl && now() - tab.allowOnce.at <= ALLOW_TTL
+}
+
+function rememberSafeUrl(tabId: number, url: string) {
+  const current = tabState.get(tabId) ?? {}
+  current.safeUrl = url
+  tabState.set(tabId, current)
+}
+
+async function restoreTab(tabId: number, targetUrl: string, sourceUrl: string) {
+  const current = tabState.get(tabId) ?? {}
+  if (!current.safeUrl || current.safeUrl === targetUrl) return
+
+  current.restoringUntil = now() + RESTORE_TTL
+  tabState.set(tabId, current)
+
+  await recordBlock({
+    sourceUrl,
+    targetUrl,
+    reason: 'top-navigation',
+  })
+
+  try {
+    await chrome.tabs.update(tabId, { url: current.safeUrl })
+  } catch {
+    // The tab may have closed before the restore fired.
+  }
+}
+
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== 'linkbypass-content') return
-  activePorts.add(port)
+  ports.add(port)
 
   getState().then((state) => {
     port.postMessage({ type: 'STATE', state } satisfies StateMessage)
   })
 
-  port.onDisconnect.addListener(() => {
-    activePorts.delete(port)
-  })
+  port.onDisconnect.addListener(() => ports.delete(port))
 })
 
-/* ─── context menus ────────────────────────── */
-
-function createMenus() {
-  const entries = Object.entries(RULE_IDS) as [keyof RulesConfig, string][]
-  for (const [rule, id] of entries) {
-    chrome.contextMenus.create({
-      id,
-      title: RULE_LABELS[rule],
-      type: 'checkbox',
-      checked: true,
-      contexts: ['action'],
-    })
-  }
-}
-
-// onCreate is called when the menu already exists (extension reload),
-// so we removeAll first to avoid duplicate-creation errors.
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.removeAll(() => {
-    createMenus()
-  })
+chrome.runtime.onInstalled.addListener(async () => {
+  const state = await getState()
+  createMenus(state)
+  await updateBadge(state)
 })
 
-// Also create on startup (in case SW wakes after browser restart without onInstalled)
-chrome.contextMenus.removeAll(() => {
-  createMenus()
+getState().then((state) => {
+  createMenus(state)
+  updateBadge(state)
 })
-
-// Set badget on startup
-getState().then(updateBadge)
 
 chrome.contextMenus.onClicked.addListener((info) => {
   const rule = (Object.entries(RULE_IDS) as [keyof RulesConfig, string][]).find(
@@ -112,54 +191,145 @@ chrome.contextMenus.onClicked.addListener((info) => {
   )?.[0]
   if (!rule || info.checked === undefined) return
 
-  getState().then((state) => {
+  getState().then(async (state) => {
     state.rules[rule] = info.checked
-    setState(state).then(() => {
-      broadcastState(state)
-      updateBadge(state)
-    })
+    await setState(state)
+    broadcastState(state)
   })
 })
 
-/* ─── messaging ────────────────────────────── */
+chrome.runtime.onMessage.addListener((msg: Request, sender, sendResponse) => {
+  const tabId = sender.tab?.id
 
-chrome.runtime.onMessage.addListener((msg: Request, _sender, sendResponse) => {
   switch (msg.type) {
     case 'GET_STATE':
       getState().then(sendResponse)
       return true
+    case 'GET_RUNTIME_STATE':
+      getRuntimeState().then(sendResponse)
+      return true
     case 'TOGGLE':
-      getState().then((state) => {
+      getState().then(async (state) => {
         state.enabled = !state.enabled
-        setState(state).then(() => {
-          broadcastState(state)
-          updateBadge(state)
-          sendResponse(state.enabled)
-        })
+        await setState(state)
+        await updateBadge(state)
+        broadcastState(state)
+        sendResponse(state.enabled)
       })
       return true
     case 'TOGGLE_RULE':
-      getState().then((state) => {
+      getState().then(async (state) => {
         state.rules[msg.rule] = msg.value
-        setState(state).then(() => {
-          broadcastState(state)
-          sendResponse(true)
-        })
+        await setState(state)
+        broadcastState(state)
+        sendResponse(true)
       })
+      return true
+    case 'CLEAR_LOG':
+      setLog([]).then(() => sendResponse(true))
+      return true
+    case 'OPEN_BLOCKED':
+      getLog().then(async (log) => {
+        const entry = log.find((item) => item.id === msg.id)
+        if (!entry) {
+          sendResponse(false)
+          return
+        }
+        await chrome.tabs.create({ url: entry.targetUrl, active: true })
+        sendResponse(true)
+      })
+      return true
+    case 'ALLOW_ONCE':
+      if (tabId !== undefined) {
+        const current = tabState.get(tabId) ?? {}
+        current.allowOnce = { targetUrl: msg.targetUrl, at: now() }
+        tabState.set(tabId, current)
+      }
+      sendResponse(true)
+      return true
+    case 'USER_INTENT':
+      if (tabId !== undefined) {
+        const current = tabState.get(tabId) ?? {}
+        current.lastIntent = {
+          targetUrl: msg.targetUrl,
+          sourceUrl: msg.sourceUrl,
+          at: now(),
+        }
+        tabState.set(tabId, current)
+      }
+      sendResponse(true)
+      return true
+    case 'BLOCKED':
+      recordBlock({
+        sourceUrl: msg.sourceUrl,
+        targetUrl: msg.targetUrl,
+        reason: msg.reason,
+      }).then(() => sendResponse(true))
       return true
   }
 })
 
-/* ─── keyboard shortcut ────────────────────── */
-
 chrome.commands.onCommand.addListener((command) => {
-  if (command === 'toggle') {
-    getState().then((state) => {
-      state.enabled = !state.enabled
-      setState(state).then(() => {
-        broadcastState(state)
-        updateBadge(state)
-      })
-    })
+  if (command !== 'toggle') return
+
+  getState().then(async (state) => {
+    state.enabled = !state.enabled
+    await setState(state)
+    await updateBadge(state)
+    broadcastState(state)
+  })
+})
+
+chrome.webNavigation.onCommitted.addListener((details) => {
+  if (details.frameId !== 0 || !details.url.startsWith('http')) return
+
+  const current = tabState.get(details.tabId) ?? {}
+  if (current.restoringUntil && now() <= current.restoringUntil) return
+  rememberSafeUrl(details.tabId, details.url)
+})
+
+chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
+  if (details.frameId !== 0 || !details.url.startsWith('http')) return
+
+  const state = await getState()
+  if (!state.enabled || !state.rules.topNavigation) return
+
+  const current = tabState.get(details.tabId)
+  if (!current?.safeUrl || isAllowed(current, details.url)) return
+  if (current.restoringUntil && now() <= current.restoringUntil) return
+  if (!isCrossSite(details.url, current.safeUrl)) return
+
+  const recentIntent = current.lastIntent && now() - current.lastIntent.at <= INTENT_TTL
+  if (!recentIntent) return
+
+  await restoreTab(details.tabId, details.url, current.safeUrl)
+})
+
+chrome.tabs.onCreated.addListener(async (tab) => {
+  if (tab.id === undefined || tab.openerTabId === undefined) return
+
+  const state = await getState()
+  if (!state.enabled || !state.rules.scriptPopups) return
+
+  const opener = tabState.get(tab.openerTabId)
+  const openerUrl = opener?.safeUrl
+  const targetUrl = tab.pendingUrl || tab.url
+  if (!targetUrl || !openerUrl || !isCrossSite(targetUrl, openerUrl)) return
+  if (isAllowed(opener, targetUrl)) return
+
+  await recordBlock({
+    sourceUrl: openerUrl,
+    targetUrl,
+    reason: 'opener-popup',
+  })
+
+  try {
+    await chrome.tabs.remove(tab.id)
+  } catch {
+    // The page may close the popup before we do.
   }
+})
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  tabState.delete(tabId)
 })

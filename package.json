@@ -1,9 +1,9 @@
 {
   "name": "linkbypass",
   "displayName": "LinkBypass",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "RanceHeart",
-  "description": "Block cross-domain navigation from HTML clicks — stay on the site you intend to.",
+  "description": "Block hostile popups, overlays, and cross-site navigation traps.",
   "type": "module",
   "license": "MIT",
   "engines": {
@@ -23,7 +23,5 @@
     "typescript": "^5.2.2",
     "vite": "^5.4.10"
   },
-  "dependencies": {
-    "canvas-confetti": "^1.9.4"
-  }
+  "dependencies": {}
 }

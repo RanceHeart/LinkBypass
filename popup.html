@@ -8,19 +8,30 @@
   <body>
     <div id="app">
       <header class="header">
-        <div class="header-left">
-          <span class="logo-icon">↗</span>
-          <span class="logo-text">LinkBypass</span>
-          <span class="shortcut-hint" id="shortcutHint">⌘.</span>
+        <div>
+          <div class="title">LinkBypass</div>
+          <div class="subtitle" id="statusText">Loading</div>
         </div>
-        <label class="toggle">
+        <label class="toggle" title="Enable or pause LinkBypass">
           <input type="checkbox" id="toggleInput" />
           <span class="toggle-track">
             <span class="toggle-thumb"></span>
           </span>
         </label>
       </header>
-      <div class="status" id="statusText">Tap to toggle</div>
+
+      <section class="section">
+        <div class="section-title">Protection</div>
+        <div class="rules" id="rules"></div>
+      </section>
+
+      <section class="section">
+        <div class="log-header">
+          <span id="countLabel">Blocked 0</span>
+          <button type="button" id="clearBtn">Clear</button>
+        </div>
+        <div class="log" id="log"></div>
+      </section>
     </div>
     <script type="module" src="/src/popup/index.ts"></script>
   </body>
