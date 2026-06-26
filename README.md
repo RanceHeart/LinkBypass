@@ -1,44 +1,40 @@
 # LinkBypass
 
-> Block cross-domain navigation from HTML clicks — stay on the site you intend to. PS: Poxx web toomany AD track, block them may quite improve your experience
+LinkBypass is a Manifest V3 Chrome extension that keeps hostile pages from
+throwing the active tab into unrelated ads, popups, and redirect traps.
 
-[![GitHub release](https://img.shields.io/github/v/release/RanceHeart/LinkBypass)](https://github.com/RanceHeart/LinkBypass/releases)
-[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-v0.1.0-blue)](https://github.com/RanceHeart/LinkBypass/releases)
+## What It Blocks
 
-Many sites wrap their outbound links in tracking redirects (Baidu, Google, Zhihu, Weibo, etc.) or have click-hijacking scripts that push you off-site. LinkBypass intercepts any HTML click that would leave the current domain and blocks it — you choose when to go.
+- Cross-site link clicks and form submissions.
+- Script-created popups from `window.open`.
+- Top-level tab hijacks after a click.
+- Full-page transparent click overlays.
+- Ad iframes that try to escape sandboxing or navigate the top page.
 
-## Features
+## How It Works
 
-- **Toggle on/off** — click the icon or press `⌘K` / `Ctrl+K`
-- **Blocks cross-domain clicks** — any `<a>` click leaving the current hostname is intercepted
-- **Ad defense** — strips `allow-top-navigation` from ad iframes, removes full-screen click overlays
-- **Prevents JS hijacking** — stops page scripts from overriding your link clicks
-- **Visual feedback** — confetti burst + toast when a link is blocked
-- **Block log** — review and re-open blocked links from the popup
-- **Subdomains count as cross-domain** — `tieba.baidu.com` → `zhidao.baidu.com` is blocked
-- **Silent operation** — no popups, no toasts unless you want them
+LinkBypass uses layered defenses instead of a single click handler:
 
-## One-click Install (Manual)
+- A `document_start` content script captures trusted user input before page
+  handlers run.
+- A main-world guard wraps page APIs such as `window.open`,
+  `location.assign`, `location.replace`, and History methods.
+- The background service worker watches top-frame navigation with
+  `webNavigation` and restores the last safe URL when a recent click causes a
+  cross-site tab hijack.
+- Opener-created popups are closed when they are cross-site and were not
+  explicitly allowed.
+- The popup shows recent blocked attempts and lets you open a blocked target
+  once when you choose.
 
-### [⬇️ Download v0.1.0 (ZIP)](https://github.com/RanceHeart/LinkBypass/releases/download/v0.1.0/LinkBypass-v0.1.0.zip)
-
-1. Download the ZIP above
-2. Unzip it somewhere
-3. Open `chrome://extensions/`
-4. Enable **Developer mode** (top right toggle)
-5. Click **Load unpacked**
-6. Select the `build` folder inside the unzipped directory
-
-Or build from source (see below).
-
-## Build from source
+## Build
 
 ```shell
 npm install
 npm run build
 ```
 
-Output goes to `build/`.
+The unpacked extension is written to `build/`.
 
 ## Test
 
@@ -47,21 +43,20 @@ npm run build
 npm test
 ```
 
-Requires [Playwright](https://playwright.dev) with bundled Chromium.
+The test runner starts local HTTP fixtures and launches Chromium with the
+unpacked extension.
 
-## Tech
+## Install Manually
 
-- Vanilla TypeScript (no framework)
-- Vite + CRXJS plugin
-- Manifest V3
-- macOS-native popup UI (light/dark mode)
-- `canvas-confetti` for burst effects
+1. Build the extension.
+2. Open `chrome://extensions/`.
+3. Enable Developer mode.
+4. Click Load unpacked.
+5. Select the `build` directory.
 
-## Keyboard Shortcut
+## Controls
 
-| Platform | Shortcut |
-|----------|----------|
-| macOS | `⌘ + K` |
-| Windows / Linux | `Ctrl + K` |
-
-Configure at `chrome://extensions/shortcuts`.
+- Click the extension icon to pause or resume protection.
+- Use the popup to toggle individual protection layers.
+- Use `Command+Period` on macOS or `Ctrl+Period` elsewhere to toggle the
+  extension.

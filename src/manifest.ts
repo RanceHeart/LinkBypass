@@ -5,7 +5,7 @@ const isDev = process.env.NODE_ENV == 'development'
 
 export default defineManifest({
   name: `${packageData.displayName || packageData.name}${isDev ? ` ➡️ Dev` : ''}`,
-  description: 'Cross-domain link? Pop confetti, chase the URL.',
+  description: 'Block hostile popups, overlays, and cross-site navigation traps.',
   version: packageData.version,
   manifest_version: 3,
   icons: {
@@ -36,8 +36,18 @@ export default defineManifest({
       matches: ['http://*/*', 'https://*/*'],
       js: ['src/contentScript/index.ts'],
       run_at: 'document_start',
+      all_frames: true,
+      match_about_blank: true,
+    },
+    {
+      matches: ['http://*/*', 'https://*/*'],
+      js: ['src/contentScript/pageGuard.ts'],
+      run_at: 'document_start',
+      all_frames: true,
+      match_about_blank: true,
+      world: 'MAIN',
     },
   ],
-  permissions: ['storage', 'contextMenus'],
+  permissions: ['storage', 'contextMenus', 'tabs', 'webNavigation', 'scripting'],
   host_permissions: ['http://*/*', 'https://*/*'],
 })

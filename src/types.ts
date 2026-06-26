@@ -1,34 +1,57 @@
-/* ─── Rules ─────────────────────────────────── */
-
 export interface RulesConfig {
-  intercept: boolean  // 跨域拦截 + 烟花
-  sandbox: boolean    // iframe 沙箱净化
-  overlay: boolean    // 全屏覆盖清除
+  linkClicks: boolean
+  scriptPopups: boolean
+  topNavigation: boolean
+  overlays: boolean
+  frames: boolean
 }
 
 export const DEFAULT_RULES: RulesConfig = {
-  intercept: true,
-  sandbox: true,
-  overlay: true,
+  linkClicks: true,
+  scriptPopups: true,
+  topNavigation: true,
+  overlays: true,
+  frames: true,
 }
-
-/* ─── App state ────────────────────────────── */
 
 export interface AppState {
   enabled: boolean
   rules: RulesConfig
 }
 
-/* ─── Port messages (background → content) ─── */
+export interface BlockEntry {
+  id: string
+  at: number
+  sourceUrl: string
+  targetUrl: string
+  reason: BlockReason
+}
+
+export type BlockReason =
+  | 'cross-site-click'
+  | 'cross-site-form'
+  | 'script-popup'
+  | 'top-navigation'
+  | 'opener-popup'
+  | 'overlay'
+
+export interface RuntimeState {
+  app: AppState
+  log: BlockEntry[]
+}
 
 export interface StateMessage {
   type: 'STATE'
   state: AppState
 }
 
-/* ─── Request messages (content/popup → bg) ── */
-
 export type Request =
+  | { type: 'GET_RUNTIME_STATE' }
   | { type: 'GET_STATE' }
   | { type: 'TOGGLE' }
   | { type: 'TOGGLE_RULE'; rule: keyof RulesConfig; value: boolean }
+  | { type: 'CLEAR_LOG' }
+  | { type: 'OPEN_BLOCKED'; id: string }
+  | { type: 'ALLOW_ONCE'; targetUrl: string }
+  | { type: 'USER_INTENT'; targetUrl: string; sourceUrl: string; input: string }
+  | { type: 'BLOCKED'; targetUrl: string; sourceUrl: string; reason: BlockReason }
